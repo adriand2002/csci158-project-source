@@ -17,7 +17,7 @@ Packages used in this project:
 2. Change your working directory using `cd csci158-project-source`
 3. Download the dataset zip, unzip it in this directory, and rename the folder to `dataset`.
 4. Install Python3.xx and pip if not done so already.
-5. Install required packages using `pip install opencv-python matplotlib scikit-image`
+5. Install required packages using `pip install opencv-python matplotlib scikit-image`. For Linux users, you may be prompted to first create a virtual environment which can be done by running `python -m venv venv; source venv/bin/activate`. 
 6. Run using `python3 main.py`. 
 
 ## For Linux users on Wayland

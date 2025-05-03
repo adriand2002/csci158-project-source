@@ -13,7 +13,7 @@ Packages used in this project:
 
 ## Running this Program
 
-1. Open a terminal in the directory of your choice and clone this repository using `git clone  https://github.com/adriand2002/csci158-project-source.git`
+1. Open a terminal in the directory of your choice and clone this repository using `git clone https://github.com/adriand2002/csci158-project-source.git`
 2. Change your working directory using `cd csci158-project-source`
 3. Download the dataset zip, unzip it in this directory, and rename the folder to `dataset`.
 4. Install Python3.xx and pip if not done so already.

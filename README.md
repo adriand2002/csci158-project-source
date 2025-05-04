@@ -16,7 +16,7 @@ Packages used in this project:
 
 1. Open a terminal in the directory of your choice and clone this repository using `git clone https://github.com/adriand2002/csci158-project-source.git`
 2. Change your working directory using `cd csci158-project-source`
-3. Download the WHOLE dataset zip, unzip it in this directory, and rename the folder to `dataset`.
+3. Download the `CASIA-FingerprintV5(BMP).zip`, extract it into this directory, and rename the folder to `dataset`.
 4. Install Python3.xx and pip if not done so already.
 5. Install required packages using `pip install opencv-python matplotlib scikit-image`. For Linux users, you may be prompted to first create a virtual environment which can be done by running `python -m venv venv; source venv/bin/activate` before you the pip install command.
 6. Run using `python3 main.py`.

@@ -21,4 +21,4 @@ Packages used in this project:
 5. Install required packages using `pip install opencv-python matplotlib scikit-image`. For Linux users, you may be prompted to first create a virtual environment which can be done by running `python -m venv venv; source venv/bin/activate` before you the pip install command.
 6. Run using `python3 main.py`.
 
-Feature extraction and template generation will take you a while to perform, so a json file with templates of each subject's right thumb has already been pregenerated for testing using extractfeatures.py. If you wish, you can regenerate it by running `python3 extractfeatures.py`.
+Feature extraction and template generation will take you a while to perform, so a json file with templates of each subject's right thumb has already been pregenerated for testing using gentemplate.py. If you wish, you can regenerate it by running `python3 gentemplate.py`.

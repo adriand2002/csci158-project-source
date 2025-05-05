@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
             #print(f' => Extracted {len(foundEndings)} ridge endings and {len(foundForks)} bifurcations')
 
-            print(f' [MATCHING 1] Minutiae Histogram')
+            # print(f' [MATCHING 1] Minutiae Histogram')
 
             normTemplate = normalize_minutiae(template)
             normSample = normalize_minutiae(minutiae)
@@ -138,11 +138,11 @@ if __name__ == "__main__":
             print(f'  => Euclidean Distance: {distance}')
         
             if accepted:
-                print('  => ACCEPTED')
+                print(' => ACCEPTED')
                 classOneTruePositives += 1
                 rocLabels.append(1)
             else:
-                print('  => REJECTED')
+                print(' => REJECTED')
                 classOneFalseNegatives += 1
                 rocLabels.append(1)
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
             newSubject = templates[j]
 
-            #print(f'[SAMPLE PROCESSING] Testing against subject {newSubject["subject"]}\'s right thumb.')
+            print(f'[SAMPLE PROCESSING] Testing against subject {newSubject["subject"]}\'s right thumb.')
             #imgPath = f'{cwd}/dataset/{newSubject}/R/{newSubject}_{finger}_0.bmp'
         
             #minutiae = extract_sample_minutiae(imgPath)
@@ -174,15 +174,14 @@ if __name__ == "__main__":
 
             distance, accepted = classification_one(normSample,normTemplate)
 
-            # print(f'  => Euclidean Distance: {distance}')
+            print(f' => Euclidean Distance: {distance}')
 
             if accepted:
-                #print('  => ACCEPTED')
-                print(f'  => false accepted distance: {distance}')
+                print(' => ACCEPTED')
                 classOneFalsePositives += 1
                 rocLabels.append(0)
             else:
-                # print('  => REJECTED')
+                print('  => REJECTED')
                 classOneTrueNegatives += 1
                 rocLabels.append(0)
             

@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
             distance, accepted = classification_one(normSample,normTemplate)
 
-            print(f'  => Euclidean Distance: {distance}')
+            print(f' => Euclidean Distance: {distance}')
         
             if accepted:
                 print(' => ACCEPTED')

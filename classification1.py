@@ -9,7 +9,7 @@ import numpy as np
 
 IMG_SIZE = (328,356)    # Standard image size in CASIA dataset
 HIST_GRID_SIZE = 4      # N in spatial_histogram()
-EUCL_THRESH = 0.9066338893965881       # Euclidean distance threshold for matching; calculated by mismatch distance average
+EUCL_THRESH = 0.9552468924906901      # Euclidean distance threshold for matching; calculated by mismatch distance average
 SPATIAL_WEIGHT = 0.7    # Affects how much spatial vs orientation data affects euclidean distance in classifier 1
 
 ################################################################################################################################

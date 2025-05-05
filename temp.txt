@@ -1,0 +1,47 @@
+    for i in range(0,5):
+        print(f"[SAMPLE PROCESSING] Testing against sample {i} of a different subject's finger")
+        imgPath = f'{cwd}/dataset/{randomSubject}/R/{randomSubject}_{finger}_{i}.bmp'
+
+        print(f' => Extracting from {imgPath}...')
+    
+        minutiae = extract_sample_minutiae(imgPath, i)
+
+        foundEndings = minutiae["endings"]
+        foundForks = minutiae["forks"]
+
+        #print(f' => Extracted {len(foundEndings)} ridge endings and {len(foundForks)} bifurcations')
+
+
+        print(f' [MATCHING 2] Normalizing Data')
+
+        normTemplate = normalize_minutiae(template)
+        normSample = normalize_minutiae(minutiae)
+
+        print(f' => Generating spatial histograms')
+
+        templateHist = minutiae_histogram(normTemplate)
+        sampleHist = minutiae_histogram(normSample)
+
+        #print(f'    -> TEMPLATE:')
+        #for i in range(0,16):
+        #    print(f'        -  {int(templateHist[i])} ridge endings, {int(templateHist[16 + i])} for square {i + 1}')
+
+        #print(f'    -> SAMPLE:')
+        #for i in range(0,16):
+        #    print(f'        -  {int(sampleHist[i])} ridge endings, {int(sampleHist[16 + i])} for square {i + 1}')
+
+        print(f' => Calculating Distance')
+
+        distance = compute_distance(templateHist, sampleHist)
+
+        print(f'    -> Distance: {distance}')
+        
+        if distance <= EUCL_THRESH:
+            print(' => Below threshold, >>> ACCEPTED')
+            classTwoFalsePositives += 1
+
+        else:
+            print(' => Above threshold, >>> REJECTED')
+            classTwoTrueNegatives += 1
+
+        break

@@ -3,21 +3,24 @@ import json
 import cv2
 import os
 import numpy as np
-
+import random
 import warnings
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
 
 warnings.simplefilter(action='ignore', category = FutureWarning)
 
 IMG_SIZE = (328,356)    # Standard image size in CASIA dataset
-HIST_GRID_SIZE = 4      # N in minutiae_histogram()
-EUCL_THRESH = 10        # Euclidean distance threshold for matching
+HIST_GRID_SIZE = 4      # N in spatial_histogram()
+EUCL_THRESH = 1.02       # Euclidean distance threshold for matching
+SPATIAL_WEIGHT = 0.7    # Affects how much spatial vs orientation data affects euclidean distance in classifier 1
 
 ################################################################################################################################
 ### Helper feature extraction and normalization methods ########################################################################
 ################################################################################################################################
 
 # Extracts minutiae from a single fingerprint sample.
-def extract_sample_minutiae(imgPath, sampleNum):
+def extract_sample_minutiae(imgPath):
     img = cv2.imread(imgPath, cv2.IMREAD_GRAYSCALE)
     _, img = cv2.threshold(img, 0, 255,  cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
@@ -132,14 +135,14 @@ def normalize_minutiae(minutiae):
     return normMinutiae
 
 ################################################################################################################################
-### CLASSIFICATION METHOD 1: GRID HISTOGRAM WITH EUCLIDEAN MATCHING ############################################################
+### CLASSIFICATION METHOD 1: EUCLIDEAN MATCHING ############################################################
 ################################################################################################################################
 
 # Computes the minutiae spatial histogram.
 # Breaks the image into a NxN grid,
 # and counts the number of endings
 # and bifurcations in each.
-def minutiae_histogram(fingerprint):
+def spatial_histogram(fingerprint):
     grid = np.zeros((2, HIST_GRID_SIZE, HIST_GRID_SIZE)) # 2 Layers, one for endings and one for bifurcations
     cellWidth = IMG_SIZE[0] / HIST_GRID_SIZE
     cellHeight = IMG_SIZE[1] / HIST_GRID_SIZE
@@ -163,6 +166,38 @@ def minutiae_histogram(fingerprint):
 
     return vector
 
+def orientation_histogram(fingerprint):
+    # flatten orientations
+    orientations = []
+    for x, y, theta in fingerprint["endings"]:
+        orientations.append(theta)
+    for x, y, thetaList in fingerprint["forks"]:
+        orientations.extend(thetaList)
+
+    # Create histogram
+    orientHist, _ = np.histogram(orientations, bins=36, range=(0,360), density = True)
+    return orientHist
+
+def classification_one(sample, template):
+    # Compute histograms
+    sampleSpatialHist = spatial_histogram(sample)
+    sampleOrientHist = orientation_histogram(sample)
+    templateSpatialHist = spatial_histogram(template)
+    templateOrientHist = orientation_histogram(template)
+
+    # Normalizing histogram vectors
+    sampleSpatialHist /= np.linalg.norm(sampleSpatialHist) + 1e-8 # 1e-8 added as hacky workaround to prevent division by zero
+    sampleOrientHist /= np.linalg.norm(sampleOrientHist) + 1e-8
+    templateSpatialHist /= np.linalg.norm(templateSpatialHist) + 1e-8
+    templateOrientHist /= np.linalg.norm(templateOrientHist) + 1e-8
+
+    # Compute euclidean distances between histograms
+    spatialDist = np.linalg.norm(sampleSpatialHist - templateSpatialHist)
+    orientDist = np.linalg.norm(sampleOrientHist - templateOrientHist)
+    combinedDist = SPATIAL_WEIGHT * spatialDist + (1 - SPATIAL_WEIGHT) * orientDist
+
+    print(f'  => Euclidean Distance: {combinedDist}')
+    return combinedDist, (combinedDist <= EUCL_THRESH)
 
 ################################################################################################################################
 ### Main execution #############################################################################################################
@@ -172,51 +207,102 @@ if __name__ == "__main__":
     cwd = os.getcwd()
     subjects = os.listdir(f'{cwd}/dataset/')
 
+    classOneTruePositives = 0
+    classOneTrueNegatives = 0
+    classOneFalsePositives = 0
+    classOneFalseNegatives = 0
+
+    rocLabels = []
+    rocDists = []
+
     print("[INIT] Grabbing templates")
 
     with open("templates.json","r") as jsonStr:
         templates = json.load(jsonStr)
 
-    print(f'=> Loaded {len(templates)} from dataset JSON')
+    print(f' => Loaded {len(templates)} from dataset JSON')
 
-    template = templates[0]
-    subject = template["subject"]
-    finger = template["finger"]
-    endings = template["endings"]
-    forks = template["forks"]
+    # Testing 5 random subjects
+    for i in range(0,5):
+        
+        template = random.choice(templates)
+        subject = template["subject"]
+        finger = template["finger"]
+        endings = template["endings"]
+        forks = template["forks"]
+        print(f"[TESTING] Testing with subject {subject}'s right thumb.")
 
-    print(f'=> Loaded finger {finger} of subject {subject} ({len(endings)} ridge endings, {len(forks)} bifurcations)')
+        print(f' => Loaded finger {finger} of subject {subject} ({len(endings)} ridge endings, {len(forks)} bifurcations)')
 
-    print(f'[SAMPLE PROCESSING] Extracting minutiae from other samples of the same finger')
+        # Test against samples of the same finger to test acceptance accuracy
+        for j in range(0,5):
+            print(f'[SAMPLE PROCESSING] Testing against sample {j} of the same finger.')
+            imgPath = f'{cwd}/dataset/{subject}/R/{subject}_{finger}_{j}.bmp'
 
-    for i in range(1,5):
-        imgPath = f'{cwd}/dataset/{subject}/R/{subject}_{finger}_{i}.bmp'
+            #print(f' => Extracting from {imgPath}...')
+        
+            minutiae = extract_sample_minutiae(imgPath)
 
-        print(f'=> Extracting from {imgPath}...')
-    
-        minutiae = extract_sample_minutiae(imgPath, i)
+            foundEndings = minutiae["endings"]
+            foundForks = minutiae["forks"]
 
-        foundEndings = minutiae["endings"]
-        foundForks = minutiae["forks"]
+            #print(f' => Extracted {len(foundEndings)} ridge endings and {len(foundForks)} bifurcations')
 
-        print(f'=> Extracted {len(foundEndings)} ridge endings and {len(foundForks)} bifurcations')
+            print(f' [MATCHING 1] Minutiae Histogram')
 
-        print(f'[MATCHING] Normalizing Data')
+            normTemplate = normalize_minutiae(template)
+            normSample = normalize_minutiae(minutiae)
 
-        normTemplate = normalize_minutiae(template)
-        normSample = normalize_minutiae(minutiae)
+            distance, accepted = classification_one(normSample,normTemplate)
+        
+            if accepted:
+                print('  => ACCEPTED')
+                classOneTruePositives += 1
+                rocLabels.append(1)
+            else:
+                print('  => REJECTED')
+                classOneFalseNegatives += 1
+                rocLabels.append(0)
 
-        print(f'=> Generating spatial histograms')
+            rocDists.append(distance)
 
-        templateHist = minutiae_histogram(normTemplate)
-        sampleHist = minutiae_histogram(normSample)
+        
+        # Choose new subjects to test rejection accuracy
+        for j in range(1,5):
+            randomSubject = templates[random.choice(range(0,len(templates)))]["subject"]
 
-        print(f'    -> TEMPLATE:')
-        for i in range(0,16):
-            print(f'        -  {int(templateHist[i])} ridge endings, {int(templateHist[16 + i])} for square {i + 1}')
+            print(f'[SAMPLE PROCESSING] Testing against subject {randomSubject}\'s finger.')
+            imgPath = f'{cwd}/dataset/{randomSubject}/R/{randomSubject}_{finger}_0.bmp'
 
-        print(f'    -> SAMPLE:')
-        for i in range(0,16):
-            print(f'        -  {int(sampleHist[i])} ridge endings, {int(sampleHist[16 + i])} for square {i + 1}')
+            #print(f' => Extracting from {imgPath}...')
+        
+            minutiae = extract_sample_minutiae(imgPath)
 
-        break
+            foundEndings = minutiae["endings"]
+            foundForks = minutiae["forks"]
+
+            #print(f' => Extracted {len(foundEndings)} ridge endings and {len(foundForks)} bifurcations')
+
+            print(f' [MATCHING 1] Minutiae Histogram')
+
+            normTemplate = normalize_minutiae(template)
+            normSample = normalize_minutiae(minutiae)
+
+            distance, accepted = classification_one(normSample,normTemplate)
+
+            if accepted:
+                print('  => ACCEPTED')
+                classOneFalsePositives += 1
+            else:
+                print('  => REJECTED')
+                classOneTrueNegatives += 1
+            
+    print(f'\n[RESULTS]')
+    print(f' => Classification Method One (Histogram + Euclidean Distance)')
+    print(f'    -> True positives: {classOneTruePositives}')
+    print(f'    -> False positives: {classOneFalsePositives}')
+    print(f'    -> True negatives: {classOneTrueNegatives}')
+    print(f'    -> False negatives: {classOneFalseNegatives}')
+
+    classOneAccuracy = (classOneTruePositives + classOneTrueNegatives) / (classOneTruePositives + classOneTrueNegatives + classOneTrueNegatives + classOneFalseNegatives)
+    print(f'    -> Accuracy: {classOneAccuracy}')

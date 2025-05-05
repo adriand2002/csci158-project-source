@@ -181,7 +181,7 @@ if __name__ == "__main__":
                 classOneFalsePositives += 1
                 rocLabels.append(0)
             else:
-                print('  => REJECTED')
+                print(' => REJECTED')
                 classOneTrueNegatives += 1
                 rocLabels.append(0)
             

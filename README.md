@@ -8,7 +8,7 @@ This project uses the Casia V5 Dataset, whose documentation and contents can be 
 
 Packages used in this project:
 - OpenCV: `opencv-python`
-- Scikit-Image: `scikit-image`
+- Scikit-Learn: `scikit-learn`
 - Numpy: `numpy`
 - Fingerprint Feature Extractor: `fingerprint-feature-extractor`
 

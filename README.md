@@ -9,6 +9,7 @@ This project uses the Casia V5 Dataset, whose documentation and contents can be 
 Packages used in this project:
 - OpenCV: `opencv-python`
 - Scikit-Learn: `scikit-learn`
+- SciPy: `scipy`
 - Numpy: `numpy`
 - Fingerprint Feature Extractor: `fingerprint-feature-extractor`
 
@@ -18,7 +19,7 @@ Packages used in this project:
 2. Change your working directory using `cd csci158-project-source`
 3. Download the `CASIA-FingerprintV5(BMP).zip`, extract it into this directory, and rename the folder to `dataset`.
 4. Install Python3.xx and pip if not done so already.
-5. Install required packages using `pip install opencv-python scikit-learn`. For Linux users, you may be prompted to first create a virtual environment which can be done by running `python -m venv venv; source venv/bin/activate` before you use the pip install command.
+5. Install required packages using `pip install opencv-python scikit-learn scipy numpy fingerprint-feature-extractor`. For Linux users, you may be prompted to first create a virtual environment which can be done by running `python -m venv venv; source venv/bin/activate` before you use the pip install command.
 6. Run using `python3 main.py`. If this doesn't work, try `python main.py`.
 
 Feature extraction and template generation will take you a while to perform, so a json file with templates of each subject's right thumb has already been pregenerated for testing using gentemplate.py. If you wish, you can regenerate it by running `python3/python gentemplate.py`.

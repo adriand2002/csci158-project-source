@@ -1,83 +1,82 @@
 from helpers import extract_sample_minutiae, normalize_minutiae
 import json
 import os
-
 from sklearn.metrics import roc_curve, auc
+from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 import numpy as np
 
 IMG_SIZE = (328,356)    # Standard image size in CASIA dataset
-HIST_GRID_SIZE = 4      # N in spatial_histogram()
-EUCL_THRESH = 0.9066338893965881      # Euclidean distance threshold for matching; calculated by mismatch distance average
-SPATIAL_WEIGHT = 0.7    # Affects how much spatial vs orientation data affects euclidean distance in classifier
+K = 10                   # Number of nearest-neighbors to consider in graph
+LENGTH_THRESH = 10      # Threshold for matching graph edges based on distance
+ANGLE_THRESH = 20       # Ditto but for relative orientation between points
+MATCH_THRESH = 0.981      # Threshold for determining acceptance based on how many edges match between sample/template graphs
 
 ################################################################################################################################
-### CLASSIFICATION METHOD 1: SPATIAL + ORIENTAL EUCLIDEAN MATCHING #############################################################
+### CLASSIFICATION METHOD 2: MINUTIAE GRAPH MATCHING + KNN ANALYSIS ############################################################
 ################################################################################################################################
 
-# Computes the minutiae spatial histogram.
-# Breaks the image into a NxN grid,
-# and counts the number of endings
-# and bifurcations in each.
-def spatial_histogram(fingerprint):
-    grid = np.zeros((2, HIST_GRID_SIZE, HIST_GRID_SIZE)) # 2 Layers, one for endings and one for bifurcations
-    cellWidth = IMG_SIZE[0] / HIST_GRID_SIZE
-    cellHeight = IMG_SIZE[1] / HIST_GRID_SIZE
+# Constructs a graph of the fingerprint's
+# minutiae, and then finds the K nearest
+# neighbors for each vertex in the graph.
+def minutiae_graph(fingerprint):
 
-    # Get count of ridge endings in each grid square
-    endings = fingerprint["endings"]
-    for ending in endings:
-        gridCol = min(int(ending[0] // cellWidth), HIST_GRID_SIZE - 1)
-        gridRow = min(int(ending[1] // cellHeight), HIST_GRID_SIZE - 1)
-        grid[0, gridRow, gridCol] += 1
+    vertices = np.array(
+        [(x,y) for x, y, theta in fingerprint["endings"]] 
+      + [(x,y) for x, y, thetas in fingerprint["forks"]],
+        dtype=np.float32 # workaround; kdTree function doesn't work with integers
+    )
 
-    # Get count of bifurcations in each grid square
-    forks = fingerprint["forks"]
-    for fork in forks:
-        gridCol = min(int(fork[0] // cellWidth), HIST_GRID_SIZE - 1)
-        gridRow = min(int(fork[1] // cellHeight), HIST_GRID_SIZE - 1)
-        grid[1, gridRow, gridCol] += 1
+    # Construct a kdtree to efficiently find KNNs
+    kdTree = KDTree(vertices)
+    edges = []
 
-    # Flatten grid into 1D vector
-    vector = grid.flatten()
+    # find K nearest neighbors through KD tree search
+    for i, vertex in enumerate(vertices):
+        dists, indices = kdTree.query(vertex, k=K+1) # skip self
 
-    return vector
+        # Building edges between nodes and nearest neighbors
+        # Each edge holds info about distance and angle
+        for j in range(1, len(indices)):
+            neighbor = vertices[indices[j]]
+            length = np.linalg.norm(vertex - neighbor)
+            angle = np.degrees(np.arctan2(neighbor[1] - vertex[1], neighbor[0] - vertex[0])) % 360
+            edges.append((i, indices[j], length, angle))
 
-# Computes simple orientation histogram by
-# collecting every orientation (direction
-# of ridge ending/bifurcation tine)
-# and sorting them into buckets/bins.
-def orientation_histogram(fingerprint):
-    # flatten orientations
-    orientations = []
-    for x, y, theta in fingerprint["endings"]:
-        orientations.append(theta)
-    for x, y, thetaList in fingerprint["forks"]:
-        orientations.extend(thetaList)
+    return edges
 
-    # Create histogram
-    orientHist, _ = np.histogram(orientations, bins=36, range=(0,360), density = True)
-    return orientHist
+# Compares edges in the graphs of two
+# fingerprints, matching them if they
+# have distances and angles within the
+# target threshold when compared
+def compare_edges(edgesA, edgesB):
+    edgeMatches = 0
 
-def classification_one(sample, template):
-    # Compute histograms
-    sampleSpatialHist = spatial_histogram(sample)
-    sampleOrientHist = orientation_histogram(sample)
-    templateSpatialHist = spatial_histogram(template)
-    templateOrientHist = orientation_histogram(template)
+    for x1, y1, l1, a1 in edgesA:
+        for x2, y2, l2, a2 in edgesB:
+            lengthDiff = abs(l1 - l2)
+            angleDiff = min(abs(a1 - a2), 360 - abs(a1 - a2))
 
-    # Normalizing histogram vectors
-    sampleSpatialHist /= np.linalg.norm(sampleSpatialHist) + 1e-8 # 1e-8 added as hacky workaround to prevent division by zero
-    sampleOrientHist /= np.linalg.norm(sampleOrientHist) + 1e-8
-    templateSpatialHist /= np.linalg.norm(templateSpatialHist) + 1e-8
-    templateOrientHist /= np.linalg.norm(templateOrientHist) + 1e-8
+            # Check if under thresholds
+            if lengthDiff < LENGTH_THRESH and angleDiff < ANGLE_THRESH:
+                # Likely match found
+                edgeMatches += 1
+                break # Stop searching; likely match already found
 
-    # Compute euclidean distances between histograms
-    spatialDist = np.linalg.norm(sampleSpatialHist - templateSpatialHist)
-    orientDist = np.linalg.norm(sampleOrientHist - templateOrientHist)
-    combinedDist = SPATIAL_WEIGHT * spatialDist + (1 - SPATIAL_WEIGHT) * orientDist
+    # Normalize to bounds of edge count
+    edgeMatches = edgeMatches / max(len(edgesA), 1)
+    return edgeMatches
 
-    return combinedDist, (combinedDist <= EUCL_THRESH)
+def classification_two(sample, template):
+
+    # Generate minutiae graphs of input fingerprints
+    sampleGraph = minutiae_graph(sample)
+    templateGraph = minutiae_graph(template)
+
+    # Compare graphs and decide on match based on score threshold
+    matchScore = compare_edges(sampleGraph, templateGraph)
+    
+    return matchScore, (matchScore > MATCH_THRESH)
 
 ################################################################################################################################
 ### Main execution #############################################################################################################
@@ -93,7 +92,7 @@ if __name__ == "__main__":
     classOneFalseNegatives = 0
 
     rocLabels = []
-    rocDists = []
+    rocScores = []
 
     print("[INIT] Grabbing templates")
 
@@ -102,7 +101,7 @@ if __name__ == "__main__":
 
     print(f' => Loaded {len(templates)} from dataset JSON')
 
-    for i in range(0,len(templates)):
+    for i in range(50,100):
         
         template = templates[i]
         subject = template["subject"]
@@ -114,7 +113,9 @@ if __name__ == "__main__":
         print(f' => Loaded subject {subject}\'s right thumb ({len(endings)} ridge endings, {len(forks)} bifurcations)')
 
         sum = 0
+        sum2 = 0
         count = 0
+        count2 = 0
 
         # Test against samples of the same finger to test acceptance accuracy
         for j in range(0,5):
@@ -130,14 +131,12 @@ if __name__ == "__main__":
 
             #print(f' => Extracted {len(foundEndings)} ridge endings and {len(foundForks)} bifurcations')
 
-            # print(f' [MATCHING 1] Minutiae Histogram')
-
             normTemplate = normalize_minutiae(template)
             normSample = normalize_minutiae(minutiae)
 
-            distance, accepted = classification_one(normSample,normTemplate)
+            score, accepted = classification_two(normSample,normTemplate)
 
-            print(f' => Euclidean Distance: {distance}')
+            print(f' => Match Score: {score}')
         
             if accepted:
                 print(' => ACCEPTED')
@@ -148,7 +147,9 @@ if __name__ == "__main__":
                 classOneFalseNegatives += 1
                 rocLabels.append(1)
 
-            rocDists.append(distance)
+            rocScores.append(score)
+            sum2 += score
+            count2 += 1
 
         
         # Choose new subjects to test rejection accuracy
@@ -174,9 +175,9 @@ if __name__ == "__main__":
             normTemplate = normalize_minutiae(template)
             normSample = normalize_minutiae(newSubject)
 
-            distance, accepted = classification_one(normSample,normTemplate)
+            score, accepted = classification_two(normSample,normTemplate)
 
-            print(f' => Euclidean Distance: {distance}')
+            print(f' => Match Score: {score}')
 
             if accepted:
                 print(' => ACCEPTED')
@@ -187,20 +188,19 @@ if __name__ == "__main__":
                 classOneTrueNegatives += 1
                 rocLabels.append(0)
             
-            rocDists.append(distance)
+            rocScores.append(score)
 
-            sum += distance
+            sum += score
             count += 1
 
-    print(f'=> mismatch distance avg: {sum/count}')
+    print(f'=> real score avg: {sum2/count2}')
+    print(f'=> mismatch score avg: {sum/count}')
 
-    # Invert score (lower distance = "higher" score)
-    rocDists = [-x for x in rocDists]
-    fpr, tpr, thresholds = roc_curve(rocLabels, rocDists)
+    fpr, tpr, thresholds = roc_curve(rocLabels, rocScores)
     roc_auc = auc(fpr, tpr)
 
     print(f'\n[RESULTS]')
-    print(f' => Classification Method One (Histogram + Euclidean Distance)')
+    print(f' => Classification Method Two (Graph + Edge Matching)')
     print(f'    -> TPR: {classOneTruePositives / (classOneTruePositives + classOneFalseNegatives)}')
     print(f'    -> FPR: {classOneFalsePositives / (classOneFalsePositives + classOneTrueNegatives)}')
     print(f'    -> TPs: {classOneTruePositives}')

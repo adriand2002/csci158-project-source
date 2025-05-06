@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     print(f' => Loaded {len(templates)} from dataset JSON')
 
-    for i in range(50,100):
+    for i in range(0,len(templates)):
         
         template = templates[i]
         subject = template["subject"]
